@@ -40,6 +40,16 @@ import java.util.Locale;
  */
 
 public class RichEditor extends WebView {
+  public interface UrlOverrideHandler {
+    boolean shouldOverrideUrlLoading(WebView view, String url);
+    boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request);
+  }
+
+  private UrlOverrideHandler urlOverrideHandler;
+
+  public void setUrlOverrideHandler(UrlOverrideHandler handler) {
+      this.urlOverrideHandler = handler;
+  }
 
   public enum Type {
     BOLD,
@@ -482,43 +492,48 @@ public class RichEditor extends WebView {
   }
 
   protected class EditorWebViewClient extends WebViewClient {
-    @Override
-    public void onPageFinished(WebView view, String url) {
-      isReady = url.equalsIgnoreCase(SETUP_HTML);
-      if (mLoadListener != null) {
-        mLoadListener.onAfterInitialLoad(isReady);
-      }
+        @Override
+        public boolean shouldOverrideUrlLoading(WebView view, String url) {
+            if (urlOverrideHandler != null) {
+                if (urlOverrideHandler.shouldOverrideUrlLoading(view, url)) {
+                    return true; // External handler handled the URL
+                }
+            }
+
+            String decode = Uri.decode(url);
+
+            if (TextUtils.indexOf(url, CALLBACK_SCHEME) == 0) {
+                callback(decode);
+                return true;
+            } else if (TextUtils.indexOf(url, STATE_SCHEME) == 0) {
+                stateCheck(decode);
+                return true;
+            }
+
+            return super.shouldOverrideUrlLoading(view, url);
+        }
+
+        @TargetApi(Build.VERSION_CODES.LOLLIPOP)
+        @Override
+        public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+            if (urlOverrideHandler != null) {
+                if (urlOverrideHandler.shouldOverrideUrlLoading(view, request)) {
+                    return true; // External handler handled the URL
+                }
+            }
+
+            final String url = request.getUrl().toString();
+            String decode = Uri.decode(url);
+
+            if (TextUtils.indexOf(url, CALLBACK_SCHEME) == 0) {
+                callback(decode);
+                return true;
+            } else if (TextUtils.indexOf(url, STATE_SCHEME) == 0) {
+                stateCheck(decode);
+                return true;
+            }
+
+            return super.shouldOverrideUrlLoading(view, request);
+        }
     }
-
-    @Override
-    public boolean shouldOverrideUrlLoading(WebView view, String url) {
-      String decode = Uri.decode(url);
-
-      if (TextUtils.indexOf(url, CALLBACK_SCHEME) == 0) {
-        callback(decode);
-        return true;
-      } else if (TextUtils.indexOf(url, STATE_SCHEME) == 0) {
-        stateCheck(decode);
-        return true;
-      }
-
-      return super.shouldOverrideUrlLoading(view, url);
-    }
-
-    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
-    @Override
-    public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-      final String url = request.getUrl().toString();
-      String decode = Uri.decode(url);
-
-      if (TextUtils.indexOf(url, CALLBACK_SCHEME) == 0) {
-        callback(decode);
-        return true;
-      } else if (TextUtils.indexOf(url, STATE_SCHEME) == 0) {
-        stateCheck(decode);
-        return true;
-      }
-      return super.shouldOverrideUrlLoading(view, request);
-    }
-  }
 }
